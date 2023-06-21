@@ -1,160 +1,139 @@
 package service
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/kangness/shangdaren_server/config"
 	"io/ioutil"
 	"math/rand"
 	"net/http"
-	"time"
 
-	"github.com/kangness/shangdaren_server/db/dao"
-	"github.com/kangness/shangdaren_server/db/model"
-
-	"gorm.io/gorm"
+	"github.com/golang/glog"
+	"github.com/kangness/shangdaren_server/model"
 )
 
-// JsonResult 返回结构
-type JsonResult struct {
-	Code     int         `json:"code"`
-	ErrorMsg string      `json:"errorMsg,omitempty"`
-	Data     interface{} `json:"data"`
-}
-
-// IndexHandler 计数器接口
-func IndexHandler(w http.ResponseWriter, r *http.Request) {
-	data, err := getIndex()
-	if err != nil {
-		fmt.Fprint(w, "内部错误")
+// HandlerHttpRequest
+func HandlerHttpRequest(w http.ResponseWriter, r *http.Request) {
+	headers := r.Header
+	headerStr, _ := json.Marshal(headers)
+	glog.Info("http request", string(headerStr))
+	requestUrl := r.URL.Path
+	var body []byte
+	var err error
+	if r.Method == "POST" {
+		body, err = ioutil.ReadAll(r.Body)
+		if err != nil {
+			glog.Error(err)
+			return
+		}
+	}
+	var response *model.SDRResponse
+	switch requestUrl {
+	case "/api/getCount":
+		response, err = handlerGetCounter(nil, r, body)
+	case "/api/setCount":
+		response, err = handlerSetCounter(nil, r, body)
+	default:
+		err = fmt.Errorf("cmd not found")
+	}
+	if err != nil && response == nil {
+		response = &model.SDRResponse{}
+		response.Code = 500
+		response.Msg = err.Error()
+	}
+	if response != nil {
+		resp, _ := json.Marshal(response)
+		glog.Info("response ", string(resp))
+		w.Write(resp)
 		return
 	}
-	fmt.Fprint(w, data)
 }
 
-// CounterHandler 计数器接口
-func CounterHandler(w http.ResponseWriter, r *http.Request) {
-	res := &JsonResult{}
-
-	if r.Method == http.MethodGet {
-		counter, err := getCurrentCounter()
-		if err != nil {
-			res.Code = -1
-			res.ErrorMsg = err.Error()
-		} else {
-			res.Data = counter.Count
+func handlerGetCounter(ctx context.Context, r *http.Request, body []byte) (*model.SDRResponse, error) {
+	request := &model.SDRGetCounterRequest{}
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, request); err != nil {
+			glog.Error(err)
+			return nil, err
 		}
-	} else if r.Method == http.MethodPost {
-		count, err := modifyCounter(r)
-		if err != nil {
-			res.Code = -1
-			res.ErrorMsg = err.Error()
-		} else {
-			res.Data = count
+	}
+	if request.Id <= 0 {
+		request.Id = 1
+	}
+	tc, err := model.FetchCounterInfoById(config.DB, request.Id)
+	if err != nil {
+		glog.Error(err)
+	}
+	response := &model.SDRResponse{
+		RequestId: "",
+		Code:      0,
+		Msg:       "OK",
+		Data:      nil,
+	}
+	resp := &model.SDRGetCounterResponse{}
+	if tc == nil || tc.Id <= 0 {
+		glog.Error("not found any data")
+		return response, nil
+	}
+	resp.Id = tc.Id
+	resp.Count = tc.Count
+	resp.CreateTime = tc.Createdat
+	resp.UpdateTime = tc.Updatedat
+	headerBin, _ := json.Marshal(r.Header)
+	resp.Ext = string(headerBin)
+	response.Data = resp
+	return response, nil
+}
+
+// handlerSetCounter ...
+func handlerSetCounter(ctx context.Context, r *http.Request, body []byte) (*model.SDRResponse, error) {
+	request := &model.SDRSetCounterRequest{}
+	if len(body) > 0 {
+		if err := json.Unmarshal(body, request); err != nil {
+			glog.Error(err)
+			return nil, err
 		}
-	} else {
-		res.Code = -1
-		res.ErrorMsg = fmt.Sprintf("请求方法 %s 不支持", r.Method)
 	}
-
-	msg, err := json.Marshal(res)
-	if err != nil {
-		fmt.Fprint(w, "内部错误")
-		return
+	if request.Id <= 0 {
+		request.Id = 1
 	}
-	w.Header().Set("content-type", "application/json")
-	w.Write(msg)
-}
-
-// modifyCounter 更新计数，自增或者清零
-func modifyCounter(r *http.Request) (int32, error) {
-	action, err := getAction(r)
-	if err != nil {
-		return 0, err
+	if len(request.Action) <= 0 {
+		request.Action = "inc"
 	}
-
-	var count int32
-	if action == "inc" {
-		count, err = upsertCounter(r)
-		if err != nil {
-			return 0, err
-		}
-	} else if action == "clear" {
-		err = clearCounter()
-		if err != nil {
-			return 0, err
-		}
-		count = 0
-	} else {
-		err = fmt.Errorf("参数 action : %s 错误", action)
+	if request.Value <= 0 {
+		request.Value = int64(rand.Intn(100))
 	}
-
-	return count, err
-}
-
-// upsertCounter 更新或修改计数器
-func upsertCounter(r *http.Request) (int32, error) {
-	currentCounter, err := getCurrentCounter()
-	var count int32
-	createdAt := time.Now()
-	if err != nil && err != gorm.ErrRecordNotFound {
-		return 0, err
-	} else if err == gorm.ErrRecordNotFound {
-		count = 1
-		createdAt = time.Now()
-	} else {
-		count = currentCounter.Count + 1 + int32(rand.Intn(100))
-		createdAt = currentCounter.CreatedAt
+	tc, _ := model.FetchCounterInfoById(config.DB, request.Id)
+	if tc == nil {
+		tc = &model.TCounters{}
 	}
-
-	counter := &model.CounterModel{
-		Id:        1,
-		Count:     count,
-		CreatedAt: createdAt,
-		UpdatedAt: time.Now(),
+	tc.Id = request.Id
+	if request.Action == "inc" {
+		tc.Count = tc.Count + request.Value
+	} else if request.Action == "clear" {
+		tc.Count = 0
+	} else if request.Action == "dec" {
+		tc.Count = tc.Count - request.Value
 	}
-	err = dao.Imp.UpsertCounter(counter)
-	if err != nil {
-		return 0, err
+	response := &model.SDRResponse{}
+	if err := model.UpdateOrderCreateCounter(config.DB, tc); err != nil {
+		glog.Error(err)
+		response.Code = 500
+		response.Msg = "数据库出错"
+		return response, err
 	}
-	return counter.Count, nil
-}
-
-func clearCounter() error {
-	return dao.Imp.ClearCounter(1)
-}
-
-// getCurrentCounter 查询当前计数器
-func getCurrentCounter() (*model.CounterModel, error) {
-	counter, err := dao.Imp.GetCounter(1)
-	if err != nil {
-		return nil, err
+	resp := &model.SDRSetCounterResponse{}
+	if tc == nil || tc.Id <= 0 {
+		glog.Error("not found any data")
+		return response, nil
 	}
-
-	return counter, nil
-}
-
-// getAction 获取action
-func getAction(r *http.Request) (string, error) {
-	decoder := json.NewDecoder(r.Body)
-	body := make(map[string]interface{})
-	if err := decoder.Decode(&body); err != nil {
-		return "", err
-	}
-	defer r.Body.Close()
-
-	action, ok := body["action"]
-	if !ok {
-		return "", fmt.Errorf("缺少 action 参数")
-	}
-
-	return action.(string), nil
-}
-
-// getIndex 获取主页
-func getIndex() (string, error) {
-	b, err := ioutil.ReadFile("./index.html")
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
+	resp.Id = tc.Id
+	resp.Count = tc.Count
+	resp.CreateTime = tc.Createdat
+	resp.UpdateTime = tc.Updatedat
+	headerBin, _ := json.Marshal(r.Header)
+	resp.Ext = string(headerBin)
+	response.Data = resp
+	return response, nil
 }

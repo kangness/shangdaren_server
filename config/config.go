@@ -1,20 +1,26 @@
-package db
+package config
 
 import (
 	"fmt"
-	"os"
-	"time"
-
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
+	"os"
+	"time"
 )
 
-var dbInstance *gorm.DB
+var DB *gorm.DB
+
+// InitServerConfig ...
+func InitServerConfig() error {
+	if err := Init(); err != nil {
+		return err
+	}
+	return nil
+}
 
 // Init 初始化数据库
 func Init() error {
-
 	source := "%s:%s@tcp(%s)/%s?readTimeout=1500ms&writeTimeout=1500ms&charset=utf8&loc=Local&&parseTime=true"
 	user := os.Getenv("MYSQL_USERNAME")
 	pwd := os.Getenv("MYSQL_PASSWORD")
@@ -48,13 +54,8 @@ func Init() error {
 	// 设置了连接可复用的最大时间
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
-	dbInstance = db
+	DB = db
 
 	fmt.Println("finish init mysql with ", source)
 	return nil
-}
-
-// Get ...
-func Get() *gorm.DB {
-	return dbInstance
 }
