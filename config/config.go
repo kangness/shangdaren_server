@@ -5,6 +5,7 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/schema"
+	"log"
 	"os"
 	"time"
 )
@@ -13,9 +14,13 @@ var DB *gorm.DB
 
 // InitServerConfig ...
 func InitServerConfig() error {
-	if err := Init(); err != nil {
-		return err
-	}
+	/*
+		if err := Init(); err != nil {
+			return err
+		}
+	*/
+	fmt.Println("init server config ok ok ok ")
+	log.Println("init server config ok ok ok ")
 	return nil
 }
 
@@ -30,7 +35,7 @@ func Init() error {
 		dataBase = "golang_demo"
 	}
 	source = fmt.Sprintf(source, user, pwd, addr, dataBase)
-	fmt.Println("start init mysql with ", source)
+	log.Println("start init mysql with ", source)
 
 	db, err := gorm.Open(mysql.Open(source), &gorm.Config{
 		NamingStrategy: schema.NamingStrategy{

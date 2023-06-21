@@ -5,26 +5,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/kangness/shangdaren_server/config"
+	"github.com/kangness/shangdaren_server/model"
 	"io/ioutil"
+	"log"
 	"math/rand"
 	"net/http"
-
-	"github.com/golang/glog"
-	"github.com/kangness/shangdaren_server/model"
+	"time"
 )
 
 // HandlerHttpRequest
 func HandlerHttpRequest(w http.ResponseWriter, r *http.Request) {
 	headers := r.Header
 	headerStr, _ := json.Marshal(headers)
-	glog.Info("http request", string(headerStr))
+	log.Println("http request", string(headerStr))
 	requestUrl := r.URL.Path
 	var body []byte
 	var err error
 	if r.Method == "POST" {
 		body, err = ioutil.ReadAll(r.Body)
 		if err != nil {
-			glog.Error(err)
+			log.Print(err)
 			return
 		}
 	}
@@ -44,7 +44,7 @@ func HandlerHttpRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	if response != nil {
 		resp, _ := json.Marshal(response)
-		glog.Info("response ", string(resp))
+		log.Println("response ", string(resp))
 		w.Write(resp)
 		return
 	}
@@ -54,17 +54,25 @@ func handlerGetCounter(ctx context.Context, r *http.Request, body []byte) (*mode
 	request := &model.SDRGetCounterRequest{}
 	if len(body) > 0 {
 		if err := json.Unmarshal(body, request); err != nil {
-			glog.Error(err)
+			log.Println(err)
 			return nil, err
 		}
 	}
 	if request.Id <= 0 {
 		request.Id = 1
 	}
-	tc, err := model.FetchCounterInfoById(config.DB, request.Id)
-	if err != nil {
-		glog.Error(err)
+	tc := &model.TCounters{
+		Id:        11,
+		Count:     22,
+		Createdat: time.Now().Format("2006-01-02 15:04:05"),
+		Updatedat: time.Now().Format("2006-01-02 15:04:05"),
 	}
+	/*
+		tc, err := model.FetchCounterInfoById(config.DB, request.Id)
+		if err != nil {
+			log.Error(err)
+		}
+	*/
 	response := &model.SDRResponse{
 		RequestId: "",
 		Code:      0,
@@ -73,7 +81,7 @@ func handlerGetCounter(ctx context.Context, r *http.Request, body []byte) (*mode
 	}
 	resp := &model.SDRGetCounterResponse{}
 	if tc == nil || tc.Id <= 0 {
-		glog.Error("not found any data")
+		log.Println("not found any data")
 		return response, nil
 	}
 	resp.Id = tc.Id
@@ -91,7 +99,7 @@ func handlerSetCounter(ctx context.Context, r *http.Request, body []byte) (*mode
 	request := &model.SDRSetCounterRequest{}
 	if len(body) > 0 {
 		if err := json.Unmarshal(body, request); err != nil {
-			glog.Error(err)
+			log.Println(err)
 			return nil, err
 		}
 	}
@@ -118,14 +126,14 @@ func handlerSetCounter(ctx context.Context, r *http.Request, body []byte) (*mode
 	}
 	response := &model.SDRResponse{}
 	if err := model.UpdateOrderCreateCounter(config.DB, tc); err != nil {
-		glog.Error(err)
+		log.Println(err)
 		response.Code = 500
 		response.Msg = "数据库出错"
 		return response, err
 	}
 	resp := &model.SDRSetCounterResponse{}
 	if tc == nil || tc.Id <= 0 {
-		glog.Error("not found any data")
+		log.Println("not found any data")
 		return response, nil
 	}
 	resp.Id = tc.Id

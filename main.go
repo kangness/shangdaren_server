@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/kangness/shangdaren_server/config"
 	"github.com/kangness/shangdaren_server/service"
-	"log"
 	"net/http"
 )
 
@@ -14,5 +13,8 @@ func main() {
 	}
 
 	http.HandleFunc("/", service.HandlerHttpRequest)
-	log.Fatal(http.ListenAndServe(":80", nil))
+	if err := http.ListenAndServe(":80", nil); err != nil {
+		fmt.Println("error ", err)
+		panic(err)
+	}
 }
