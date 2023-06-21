@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/kangness/shangdaren_server/config"
 	"github.com/kangness/shangdaren_server/model"
-	"io/ioutil"
 	"log"
 	"math/rand"
 	"net/http"
@@ -17,31 +16,36 @@ import (
 func HandlerHttpRequest(w http.ResponseWriter, r *http.Request) {
 	headers := r.Header
 	headerStr, _ := json.Marshal(headers)
-	log.Println("http request", string(headerStr))
-	requestUrl := r.URL.Path
-	var body []byte
-	var err error
-	if r.Method == "POST" {
-		body, err = ioutil.ReadAll(r.Body)
-		if err != nil {
-			log.Print(err)
-			return
-		}
-	}
+	fmt.Println("http request", string(headerStr))
 	var response *model.SDRResponse
-	switch requestUrl {
-	case "/api/getCount":
-		response, err = handlerGetCounter(nil, r, body)
-	case "/api/setCount":
-		response, err = handlerSetCounter(nil, r, body)
-	default:
-		err = fmt.Errorf("cmd not found")
-	}
-	if err != nil && response == nil {
-		response = &model.SDRResponse{}
-		response.Code = 500
-		response.Msg = err.Error()
-	}
+	response = &model.SDRResponse{}
+	response.Code = 0
+	response.Msg = "OK"
+	response.Data = string(headerStr)
+	/*
+		requestUrl := r.URL.Path
+		var body []byte
+		var err error
+		if r.Method == "POST" {
+			body, err = ioutil.ReadAll(r.Body)
+			if err != nil {
+				log.Print(err)
+				return
+			}
+		}
+		switch requestUrl {
+		case "/api/getCount":
+			response, err = handlerGetCounter(nil, r, body)
+		case "/api/setCount":
+			response, err = handlerSetCounter(nil, r, body)
+		default:
+			err = fmt.Errorf("cmd not found")
+		}
+		if err != nil && response == nil {
+			response = &model.SDRResponse{}
+			response.Code = 500
+			response.Msg = err.Error()
+		}*/
 	if response != nil {
 		resp, _ := json.Marshal(response)
 		log.Println("response ", string(resp))
